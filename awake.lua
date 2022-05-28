@@ -42,7 +42,6 @@ options.OUT = {"audio", "midi", "audio + midi", "crow out 1+2", "crow ii JF"}
 g = grid.connect()
 
 alt = false
-running = true
 
 mode = 1
 mode_names = {"STEP","LOOP","SOUND","OPTION"}
@@ -140,62 +139,46 @@ function random()
 end
 
 function step()
-  while true do
+  all_notes_off()
 
-    clock.sync(1/params:get("step_div"))
-    if running then
-      all_notes_off()
+  one.pos = one.pos + 1
+  if one.pos > one.length then one.pos = 1 end
+  two.pos = two.pos + 1
+  if two.pos > two.length then two.pos = 1 end
 
-      one.pos = one.pos + 1
-      if one.pos > one.length then one.pos = 1 end
-      two.pos = two.pos + 1
-      if two.pos > two.length then two.pos = 1 end
+  if one.data[one.pos] > 0 then
+    local note_num = notes[one.data[one.pos]+two.data[two.pos]]
+    local freq = MusicUtil.note_num_to_freq(note_num)
+    -- Trig Probablility
+    if math.random(100) <= params:get("probability") then
+      -- Audio engine out
+      if params:get("out") == 1 or params:get("out") == 3 then
+        engine.hz(freq)
+      elseif params:get("out") == 4 then
+        crow.output[1].volts = (note_num-60)/12
+        crow.output[2].execute()
+      elseif params:get("out") == 5 then
+        crow.ii.jf.play_note((note_num-60)/12,5)
+      end
 
-      if one.data[one.pos] > 0 then
-        local note_num = notes[one.data[one.pos]+two.data[two.pos]]
-        local freq = MusicUtil.note_num_to_freq(note_num)
-        -- Trig Probablility
-        if math.random(100) <= params:get("probability") then
-          -- Audio engine out
-          if params:get("out") == 1 or params:get("out") == 3 then
-            engine.hz(freq)
-          elseif params:get("out") == 4 then
-            crow.output[1].volts = (note_num-60)/12
-            crow.output[2].execute()
-          elseif params:get("out") == 5 then
-            crow.ii.jf.play_note((note_num-60)/12,5)
-          end
+      -- MIDI out
+      if (params:get("out") == 2 or params:get("out") == 3) then
+        midi_device:note_on(note_num, 96, midi_channel)
+        table.insert(active_notes, note_num)
 
-          -- MIDI out
-          if (params:get("out") == 2 or params:get("out") == 3) then
-            midi_device:note_on(note_num, 96, midi_channel)
-            table.insert(active_notes, note_num)
-
-            --local note_off_time = 
-            -- Note off timeout
-            if params:get("note_length") < 4 then
-              notes_off_metro:start((60 / params:get("clock_tempo") / params:get("step_div")) * params:get("note_length") * 0.25, 1)
-            end
-          end
+        --local note_off_time = 
+        -- Note off timeout
+        if params:get("note_length") < 4 then
+          notes_off_metro:start((60 / params:get("clock_tempo") / params:get("step_div")) * params:get("note_length") * 0.25, 1)
         end
       end
-
-      if g then
-        gridredraw()
-      end
-      redraw()
-    else
     end
   end
-end
 
-function stop()
-  running = false
-  all_notes_off()
-end
-
-function start()
-  running = true
+  if g then
+    gridredraw()
+  end
+  redraw()
 end
 
 function reset()
@@ -221,11 +204,7 @@ function midi_event(data)
       clock.transport.reset()
       clock.transport.start()
   elseif msg.type == "continue" then
-    if running then 
       clock.transport.stop()
-    else 
-      clock.transport.start()
-    end
   end 
   if msg.type == "stop" then
     clock.transport.stop()
@@ -275,7 +254,6 @@ function init()
     end}
   
   params:add_group("step",8)
-  params:add{type = "number", id = "step_div", name = "step division", min = 1, max = 16, default = 4}
 
   params:add{type = "option", id = "note_length", name = "note length",
     options = {"25%", "50%", "75%", "100%"},
@@ -327,7 +305,9 @@ function init()
   params:default()
   midi_device.event = midi_event
 
-  clock.run(step)
+  -- clock.run(step)
+  crow.input[1].change = step
+  crow.input[1].mode("change", 2.0, 0.25, "rising")
 
   norns.enc.sens(1,8)
 end
@@ -415,11 +395,11 @@ function enc(n, delta)
     end
   elseif mode == 4 then --option
     if n==2 then
-      if alt==false then
-        params:delta("clock_tempo", delta)
-      else
-        params:delta("step_div",delta)
-      end
+      -- if alt==false then
+      --   params:delta("clock_tempo", delta)
+      -- else
+      --   params:delta("step_div",delta)
+      -- end
     elseif n==3 then
       if alt==false then
         params:delta("root_note", delta)
