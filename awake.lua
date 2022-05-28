@@ -305,11 +305,12 @@ function init()
   params:default()
   midi_device.event = midi_event
 
-  -- clock.run(step)
   crow.input[1].change = step
   crow.input[1].mode("change", 2.0, 0.25, "rising")
 
   norns.enc.sens(1,8)
+
+  gridredraw()
 end
 
 function g.key(x, y, z)
@@ -426,6 +427,7 @@ function key(n,z)
           edit_ch = 1
           if edit_pos > one.length then edit_pos = one.length end
         end
+        gridredraw()
       else
         -- clear
         for i=1,one.length do params:set("one_data_"..i, 0) end
